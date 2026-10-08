@@ -1,0 +1,25 @@
+# Deps / build
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Env — ne jamais committer les clés Supabase
+.env
+.env.*.local
+
+# Logs
+*.log
+.dev.log
+logs/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Supabase CLI (état local, pas de secrets mais inutile en repo)
+supabase/.temp/
+supabase/.branches/
