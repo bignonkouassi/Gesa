@@ -120,6 +120,30 @@ export const priceUpdate = z.object({ price: amount.max(100_000_000, 'Prix de ve
 
 export const customerInput = z.object({ name: nameText, phone: phoneText })
 
+/* Paliers de prix : seuil entier >= 2 unités, prix entier >= 0 F */
+export const tierModeInput = z.enum(['palier', 'tranche'])
+
+export const tierInput = z.object({
+  min_quantity: z
+    .number({ invalid_type_error: 'Quantité numérique attendue.' })
+    .int('Le seuil doit être un nombre entier d’unités.')
+    .min(2, 'Un palier commence à partir de 2 unités.')
+    .max(999999, 'Seuil trop élevé.'),
+  unit_price: amount,
+})
+
+/** Règle par défaut d'une boutique : seuil et remise habituels (préremplissage seul) */
+export const shopTierDefaultInput = z.object({
+  min_quantity: z
+    .number({ invalid_type_error: 'Quantité numérique attendue.' })
+    .int('Le seuil doit être un nombre entier d’unités.')
+    .min(2, 'Un palier commence à partir de 2 unités.')
+    .max(999999, 'Seuil trop élevé.'),
+  discount_pct: z
+    .number({ invalid_type_error: 'Remise numérique attendue.' })
+    .min(0.5, 'Remise trop faible (0,5 % minimum).')
+    .max(90, 'Remise trop forte (90 % maximum).'),
+})
 export const saleInput = z
   .object({
     itemId: z.string().min(1, 'Article introuvable.'),
@@ -129,6 +153,9 @@ export const saleInput = z
     deposit: amount.optional(),
     dueDate: dateISO.nullable().optional(),
     date: dateNoFuture,
+    overridePrice: amount.optional(),
+    overrideNote: z.string().trim().max(200, '200 caractères maximum.').optional(),
+    saleMode: z.enum(['cumul_jour', 'un_client']).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.payment === 'crédit' && !v.customerId) {
@@ -211,3 +238,7 @@ export const pinInput = z
   .or(z.string().regex(/^\d{6}$/, 'Le code PIN doit contenir exactement 6 chiffres.'))
 
 export const emailInput = z.string().trim().email('Adresse e-mail invalide.').max(120, '120 caractères maximum.')
+
+/** Identité demandée à l'inscription (prénom requis pour la salutation) */
+export const firstNameInput = z.string().trim().min(1, 'Indique ton prénom.').max(40, '40 caractères maximum.')
+export const lastNameInput = z.string().trim().max(40, '40 caractères maximum.')

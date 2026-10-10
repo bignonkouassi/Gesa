@@ -4,12 +4,14 @@ import type {
   Customer,
   DB,
   Item,
+  PriceTier,
   Restock,
   Sale,
   Shop,
   StockMovement,
 } from './types'
 import { addDays, toISO } from './format'
+import { previewLine } from './tiers'
 
 /** Générateur déterministe pour des données de démonstration reproductibles */
 function makeRng(seed: number) {
@@ -108,6 +110,8 @@ export function createDemoDB(): DB {
         low_stock_threshold: 5,
         opening_stock: opening,
         opening_cost: s.cost,
+        tiered_pricing: false,
+        tier_mode: 'palier',
         created_at: ts(addDays(now, -380)),
         deleted_at: null,
       })
@@ -115,6 +119,43 @@ export function createDemoDB(): DB {
   }
   mkItems('shop_eau', 'eau')
   mkItems('shop_cuisine', 'cuisine')
+
+  /* Démo prix par paliers : Boutique Gros (Savon, Riz, Huile).
+     Seule l'Huile a l'option : 1 000 F, coût 700 F, paliers 3 → 900 F et 10 → 850 F.
+     Ventes de 1, 2, 3, 5 et 10 unités : les trois niveaux de prix. */
+  const GROS_SHOP = 'shop_gros'
+  shops.push({ id: GROS_SHOP, user_id: 'demo-user', name: 'Boutique Gros', created_at: ts(addDays(now, -60)), deleted_at: null })
+  const grosCatalog = [
+    { id: 'item_gros_savon', name: 'Savon', cost: 400, price: 600, stock: 30, tiered: false },
+    { id: 'item_gros_riz', name: 'Riz', cost: 2200, price: 3000, stock: 25, tiered: false },
+    { id: 'item_gros_huile', name: 'Huile', cost: 700, price: 1000, stock: 40, tiered: true },
+  ]
+  for (const g of grosCatalog) {
+    items.push({
+      id: g.id,
+      shop_id: GROS_SHOP,
+      name: g.name,
+      cost_price: g.cost,
+      price: g.price,
+      stock: g.stock,
+      low_stock_threshold: 5,
+      opening_stock: g.stock,
+      opening_cost: g.cost,
+      tiered_pricing: g.tiered,
+      tier_mode: 'palier',
+      created_at: ts(addDays(now, -60)),
+      deleted_at: null,
+    })
+  }
+  const price_tiers: PriceTier[] = [
+    { id: 'tier_gros_huile_3', item_id: 'item_gros_huile', min_quantity: 3, unit_price: 900, created_at: ts(addDays(now, -60)) },
+    { id: 'tier_gros_huile_10', item_id: 'item_gros_huile', min_quantity: 10, unit_price: 850, created_at: ts(addDays(now, -60)) },
+  ]
+  const huilePlan: Plan = {
+    itemId: 'item_gros_huile', shopId: GROS_SHOP, key: 'eau', name: 'Huile',
+    price: 1000, cost: 700, daily: 0, opening: 40, qty: 40, restocked: 0,
+  }
+  const HUILE_TIERS = [{ min_quantity: 3, unit_price: 900 }, { min_quantity: 10, unit_price: 850 }]
 
   const customers: Customer[] = CUSTOMERS.map((c, i) => ({
     id: `cust_${i}`,
@@ -153,25 +194,30 @@ export function createDemoDB(): DB {
     })
   }
 
-  const addSale = (plan: Plan, date: Date, qty: number, credit?: { customer: Customer; due?: string; paid?: number }) => {
+  const addSale = (plan: Plan, date: Date, qty: number, credit?: { customer: Customer; due?: string; paid?: number }, tier?: { tiers: { min_quantity: number; unit_price: number }[]; mode: 'palier' | 'tranche'; enabled: boolean }) => {
     plan.qty -= qty
     const saleId = uid('sale')
+    const line = tier ? previewLine(plan.price, tier.tiers, tier.mode, qty, tier.enabled) : { unitPrice: plan.price, total: plan.price * qty, tierMin: null as number | null }
     const sale: Sale = {
       id: saleId,
       shop_id: plan.shopId,
       item_id: plan.itemId,
       item_name: plan.name,
       quantity: qty,
-      unit_price: plan.price,
+      unit_price: line.unitPrice,
       unit_cost: plan.cost,
       payment_type: credit ? 'crédit' : 'comptant',
       customer_id: credit ? credit.customer.id : null,
       sale_date: toISO(date),
       created_at: ts(date),
+      tier_min_quantity: line.tierMin,
+      sale_mode: tier && tier.enabled && line.tierMin !== null ? 'un_client' : null,
+      price_overridden: false,
+      override_note: null,
     }
     sales.push(sale)
     if (credit) {
-      const total = qty * plan.price
+      const total = line.total
       // Crédit forcé : acompte imposé. Crédit aléatoire : ~40 % ont un premier versement
       const amountPaid =
         credit.paid !== undefined
@@ -212,6 +258,10 @@ export function createDemoDB(): DB {
   }
 
   /* ---------------- 12 mois de ventes ---------------- */
+  // Démo paliers : ventes d'huile de 1, 2, 3, 5 et 10 unités (prix 1000/1000/900/900/850)
+  ;[1, 2, 3, 5, 10].forEach((q, k) => {
+    addSale(huilePlan, addDays(now, -(9 - k * 2)), q, undefined, { tiers: HUILE_TIERS, mode: 'palier', enabled: true })
+  })
   const FORCE: Record<number, () => void> = {
     // un crédit soldé
     60: () => {
@@ -302,6 +352,11 @@ export function createDemoDB(): DB {
       item.cost_price = plan.cost
     }
   }
+  const huileItem = items.find((i) => i.id === 'item_gros_huile')
+  if (huileItem) {
+    huileItem.stock = huilePlan.qty
+    huileItem.cost_price = huilePlan.cost
+  }
 
   /* ---------------- Mouvements de stock (stock avant / après exact) ---------------- */
   type Ev = { date: string; kind: 'r' | 's'; r?: Restock; s?: Sale }
@@ -358,6 +413,7 @@ export function createDemoDB(): DB {
   return {
     shops,
     items,
+    price_tiers,
     restocks,
     customers,
     sales,

@@ -249,6 +249,74 @@ export function triggerDownload(blob: Blob, filename: string): void {
   }, 15000)
 }
 
+/* ---------------- Logo de l'application dans les PDF ---------------- */
+
+let logoCache: string | null = null
+let logoLoading: Promise<string | null> | null = null
+
+function loadLogo(): Promise<string | null> {
+  if (logoCache) return Promise.resolve(logoCache)
+  if (!logoLoading) {
+    logoLoading = fetch('/logo-pdf.png')
+      .then((r) => {
+        if (!r.ok) throw new Error('logo introuvable')
+        return r.blob()
+      })
+      .then(
+        (b) =>
+          new Promise<string>((resolve, reject) => {
+            const fr = new FileReader()
+            fr.onload = () => resolve(String(fr.result))
+            fr.onerror = () => reject(new Error('lecture logo impossible'))
+            fr.readAsDataURL(b)
+          }),
+      )
+      .then((d) => (logoCache = d))
+      .catch(() => null)
+  }
+  return logoLoading
+}
+
+/** À appeler au démarrage : le logo est prêt quand l'utilisateur exporte. */
+export function preloadLogo(): void {
+  void loadLogo()
+}
+
+export function logoDataUrl(): string | null {
+  if (!logoCache) void loadLogo()
+  return logoCache
+}
+
+/** Logo en haut à droite (optionnel : absent silencieusement si indisponible). */
+export function drawLogoTopRight(doc: import('jspdf').jsPDF, size = 26): void {
+  const url = logoDataUrl()
+  if (!url) return
+  try {
+    const w = doc.internal.pageSize.getWidth()
+    doc.addImage(url, 'PNG', w - 14 - size, 10, size, size)
+  } catch {
+    /* logo décoratif : ne bloque jamais l'export */
+  }
+}
+
+/** Impression navigateur : le nom du fichier PDF vient du titre de la page. */
+export function printWithTitle(title: string): void {  const prev = document.title
+  const done = () => {
+    document.title = prev
+    window.removeEventListener('afterprint', done)
+  }
+  window.addEventListener('afterprint', done)
+  document.title = title
+  window.print()
+  // Sécurité : si afterprint ne se déclenche pas, restaure après un délai
+  window.setTimeout(() => {
+    if (document.title === title) {
+      document.title = prev
+      window.removeEventListener('afterprint', done)
+    }
+  }, 5000)
+}
+
 function pctText(v: number | null): string {
   if (v === null) return '—'
   return `${v >= 0 ? '+' : ''}${Math.round(v)} %`
@@ -264,6 +332,7 @@ function downloadPdf(data: FicheData): void {
   doc.setFontSize(17)
   doc.setTextColor(5, 150, 105)
   doc.text('Fiche de résultats', 14, y)
+  drawLogoTopRight(doc)
   y += 7
   doc.setFontSize(10)
   doc.setTextColor(60)

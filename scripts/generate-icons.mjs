@@ -1,7 +1,9 @@
 /**
- * Génère les icônes PWA (public/icon-192.png, public/icon-512.png)
+ * Génère des icônes PWA de SECOURS (public/icon-192.png, public/icon-512.png)
  * sans aucune dépendance : encodeur PNG minimal (zlib natif) +
- * police bitmap 5×7 pour les lettres « MB ».
+ * police bitmap 5×7 pour la lettre « G ».
+ * ATTENTION : ce script écrase les icônes officielles du pack design
+ * (G stylisé + pin + colis). Ne l'exécuter qu'en cas de besoin.
  * Usage : node scripts/generate-icons.mjs
  */
 import { deflateSync } from 'node:zlib'
@@ -35,15 +37,14 @@ function chunk(type, data) {
 
 /* ----- Police bitmap 5×7 ----- */
 const FONT = {
-  M: ['10001', '11011', '10101', '10001', '10001', '10001', '10001'],
-  B: ['11110', '10001', '10001', '11110', '10001', '10001', '11110'],
+  G: ['01110', '10001', '10000', '10111', '10001', '10001', '01110'],
 }
 
-/** Icône : carré arrondi émeraude + « MB » blanc en pixels */
+/** Icône : carré arrondi émeraude + « G » blanc en pixels */
 function makeIcon(size) {
   const px = Buffer.alloc(size * size * 4)
   const radius = Math.round(size * 0.18)
-  const bg = [5, 150, 105] // #059669
+  const bg = [4, 120, 87] // #047857
   const fg = [255, 255, 255]
 
   const inRounded = (x, y) => {
@@ -52,9 +53,9 @@ function makeIcon(size) {
     return dx * dx + dy * dy <= radius * radius
   }
 
-  // Lettres centrées : 2 glyphes de 5×7 + 1 colonne d'espace = 11 colonnes
+  // Lettre centrée : 1 glyphe de 5×7
   const cell = Math.max(2, Math.floor(size / 16))
-  const textW = 11 * cell
+  const textW = 5 * cell
   const textH = 7 * cell
   const x0 = Math.floor((size - textW) / 2)
   const y0 = Math.floor((size - textH) / 2)
@@ -67,8 +68,7 @@ function makeIcon(size) {
       return rows[row][col] === '1'
     }
   }
-  const m = glyph('M', 0)
-  const b = glyph('B', 6)
+  const g = glyph('G', 0)
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -79,7 +79,7 @@ function makeIcon(size) {
       }
       const tx = Math.floor((x - x0) / cell)
       const ty = Math.floor((y - y0) / cell)
-      const on = x >= x0 && y >= y0 && (m(tx, ty) || b(tx, ty))
+      const on = x >= x0 && y >= y0 && g(tx, ty)
       const c = on ? fg : bg
       px[i] = c[0]
       px[i + 1] = c[1]

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore, useScopedDB } from '../state/store'
 import { Button, Modal } from './ui'
+import { CsvIcon, DownloadIcon, PdfIcon, TableIcon } from './icons'
 import {
   compare,
   previousRange,
@@ -70,7 +71,7 @@ export function FicheButton({
   return (
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
-        ⬇ {label}
+        <DownloadIcon /> {label}
       </Button>
       <Modal open={open} title="Télécharger la fiche" onClose={() => setOpen(false)}>
         <div className="space-y-3">
@@ -83,12 +84,14 @@ export function FicheButton({
             <p className="mt-0.5 text-slate-400">Fichier : {fileBase}.pdf / .xlsx / .csv</p>
           </div>
           <div className="grid gap-2">
-            <Button onClick={() => handle('pdf')}>📄 PDF (prêt à imprimer)</Button>
+            <Button onClick={() => handle('pdf')}>
+              <PdfIcon /> PDF (prêt à imprimer)
+            </Button>
             <Button variant="secondary" onClick={() => handle('excel')}>
-              📊 Excel (.xlsx)
+              <TableIcon /> Excel (.xlsx)
             </Button>
             <Button variant="secondary" onClick={() => handle('csv')}>
-              📝 CSV
+              <CsvIcon /> CSV
             </Button>
           </div>
         </div>

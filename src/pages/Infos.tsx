@@ -24,7 +24,7 @@ export function Confidentialite({ onBack }: { onBack: () => void }) {
       <SectionTitle>Politique de confidentialité</SectionTitle>
       <Card className="space-y-3 text-sm text-slate-600">
         <p>
-          <b>Données collectées :</b> uniquement ce qui est utile au fonctionnement de ton activité —
+          <b>Données collectées :</b> uniquement ce qui est utile au fonctionnement de ton activité :
           noms et prix de tes articles, tes ventes, tes stocks, et (si tu le saisis) le nom et le
           téléphone de tes clients à crédit. Aucune donnée de paiement bancaire n’est stockée.
         </p>

@@ -22,6 +22,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   Field,
   Input,
@@ -30,6 +31,10 @@ import {
   Segmented,
   Select,
 } from '../components/ui'
+import { isTiered } from '../lib/tiers'
+import { writeSalePrefill } from '../lib/salePrefill'
+import { atLeast } from '../lib/permissions'
+import type { PageKey } from '../components/Shell'
 import { FicheButton } from '../components/FicheButton'
 import { slug } from '../lib/fiche'
 import { canSeeFinances, canExport } from '../lib/permissions'
@@ -55,9 +60,10 @@ const SORTS: { value: SortKey; label: string }[] = [
 /** Nombre de lignes affichées (les listes peuvent être très longues) */
 const LIST_LIMIT = 300
 
-export function Historique() {
-  const { db, scope, role } = useStore()
+export function Historique({ onNavigate }: { onNavigate: (p: PageKey) => void }) {
+  const { db, scope, role, cancelSaleById } = useStore()
   const seeMoney = canSeeFinances(role)
+  const canCorrect = atLeast(role, 'gerant')
   const { items, sales, restocks, credits, payments, customers } = useScopedDB()
 
   const [tab, setTab] = useState<Tab>('ventes')
@@ -72,6 +78,8 @@ export function Historique() {
   const [client, setClient] = useState('')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('date')
+  const [grosOnly, setGrosOnly] = useState(false)
+  const [correcting, setCorrecting] = useState<Sale | null>(null)
   const [periodsKind, setPeriodsKind] = useState<'semaines' | 'mois'>('semaines')
   const [detail, setDetail] = useState<PeriodSummary | null>(null)
 
@@ -99,7 +107,11 @@ export function Historique() {
 
   const filteredSales = useMemo(() => {
     const rows = sales.filter(
-      (s) => inRange(s.sale_date, range) && (!article || s.item_id === article) && (!client || s.customer_id === client),
+      (s) =>
+        inRange(s.sale_date, range) &&
+        (!article || s.item_id === article) &&
+        (!client || s.customer_id === client) &&
+        (!grosOnly || ((s.sale_mode ?? 'un_client') === 'un_client' && s.tier_min_quantity != null)),
     )
     const searched = rows.filter((s) => matches(`${s.item_name} ${customerName(s.customer_id)}`))
     const sorted = [...searched]
@@ -108,7 +120,7 @@ export function Historique() {
     if (sort === 'benefice') sorted.sort((a, b) => saleProfit(b) - saleProfit(a))
     return sorted
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sales, range, article, client, query, sort, customers, items])
+  }, [sales, range, article, client, query, sort, customers, items, grosOnly])
 
   const filteredRestocks = useMemo(() => {
     const rows = restocks.filter((r) => inRange(r.restock_date, range) && (!article || r.item_id === article))
@@ -271,6 +283,19 @@ export function Historique() {
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, article, fournisseur…" />
           </Field>
         </div>
+        {tab === 'ventes' && (
+          <div className="flex justify-end">
+            <Segmented
+              value={grosOnly ? 'gros' : 'tous'}
+              onChange={(v) => setGrosOnly(v === 'gros')}
+              size="sm"
+              options={[
+                { value: 'tous', label: 'Toutes' },
+                { value: 'gros', label: 'Prix de gros appliqué' },
+              ]}
+            />
+          </div>
+        )}
         <p className="text-xs text-slate-400">
           Boutique : <b>{shopLabel}</b> · {count} ligne(s) · tri par {SORTS.find((s) => s.value === sort)?.label.toLowerCase()}
           {count > LIST_LIMIT ? ` · ${LIST_LIMIT} premières affichées` : ''}
@@ -284,16 +309,42 @@ export function Historique() {
             <EmptyState title="Aucune vente sur cette période" hint="Change la période ou saisis une vente depuis l’onglet Ventes." />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {filteredSales.slice(0, LIST_LIMIT).map((s: Sale) => (
+              {filteredSales.slice(0, LIST_LIMIT).map((s: Sale) => {
+                const saleItem = items.find((i) => i.id === s.item_id) ?? db.items.find((i) => i.id === s.item_id)
+                const showMode = !!saleItem && isTiered(saleItem)
+                return (
                 <li key={s.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-700">
                       {s.quantity} × {s.item_name}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {formatDateShort(s.sale_date)} · {customerName(s.customer_id)} · {s.payment_type}
-                      {s.payment_type === 'crédit' ? '' : ''}
+                      {formatDateShort(s.sale_date)} · {customerName(s.customer_id)} · {s.payment_type} ·{' '}
+                      {fcfa(s.unit_price)}/u
                     </p>
+                    {(s.price_overridden || s.tier_min_quantity != null || showMode) && (
+                      <p className="mt-1 flex flex-wrap gap-1">
+                        {s.price_overridden ? (
+                          <Badge className="bg-amber-100 text-amber-800">Prix modifié</Badge>
+                        ) : s.tier_min_quantity != null ? (
+                          <Badge className="bg-emerald-100 text-emerald-700">Prix de gros</Badge>
+                        ) : null}
+                        {showMode && (
+                          <Badge className="bg-slate-100 text-slate-600">
+                            {(s.sale_mode ?? 'un_client') === 'un_client' ? 'Un seul client' : 'Cumul de la journée'}
+                          </Badge>
+                        )}
+                      </p>
+                    )}
+                    {canCorrect && (
+                      <button
+                        type="button"
+                        onClick={() => setCorrecting(s)}
+                        className="mt-1 text-xs font-semibold text-emerald-700 hover:underline"
+                      >
+                        Corriger
+                      </button>
+                    )}
                   </div>
                   <div className="shrink-0 text-right text-xs">
                     <p className="font-bold text-slate-800">{fcfa(saleRevenue(s))}</p>
@@ -304,7 +355,8 @@ export function Historique() {
                     )}
                   </div>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </Card>
@@ -462,6 +514,31 @@ export function Historique() {
         kind={periodsKind}
         shopSlug={shopSlug}
         onClose={() => setDetail(null)}
+      />
+
+      <ConfirmDialog
+        open={correcting !== null}
+        title="Corriger cette vente ?"
+        message={
+          correcting
+            ? `La vente (${correcting.quantity} × ${correcting.item_name}) sera annulée : stock remis, crédit éventuel retiré, trace au journal, puis le formulaire rouvrira prérempli pour la ressaisir dans le bon mode.`
+            : ''
+        }
+        confirmLabel="Annuler et ressaisir"
+        onConfirm={() => {
+          const target = correcting
+          setCorrecting(null)
+          if (!target) return
+          void cancelSaleById(target.id, {
+            doneMsg: `Vente annulée : ${target.quantity} × ${target.item_name}. Ressaisis-la dans le bon mode.`,
+            auditDetail: 'Correction du mode de vente (cumul / un seul client)',
+          }).then((ok) => {
+            if (!ok) return
+            writeSalePrefill({ item_id: target.item_id, quantity: target.quantity, sale_date: target.sale_date })
+            onNavigate('ventes')
+          })
+        }}
+        onCancel={() => setCorrecting(null)}
       />
     </div>
   )

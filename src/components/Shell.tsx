@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { useStore, type Scope } from '../state/store'
 import { Button } from './ui'
 import { NetworkStatus } from './NetworkStatus'
+import { initials, useProfile } from '../lib/profile'
+import { useTheme, type ThemeMode } from '../lib/theme'
 
 export type PageKey = 'dashboard' | 'ventes' | 'credits' | 'historique' | 'boutiques' | 'compte'
 
@@ -76,9 +78,12 @@ const NAV: { key: PageKey; label: string; short: string; icon: ReactNode }[] = [
 
 function ShopTabs() {
   const { db, scope, setScope } = useStore()
+  const shops = db.shops.filter((s) => !s.deleted_at)
+  // Avant la première boutique, rien à filtrer : on masque les onglets
+  if (shops.length === 0) return null
   const tabs: { key: Scope; label: string }[] = [
     { key: 'all', label: 'Toutes les boutiques' },
-    ...db.shops.filter((s) => !s.deleted_at).map((s) => ({ key: s.id as Scope, label: s.name })),
+    ...shops.map((s) => ({ key: s.id as Scope, label: s.name })),
   ]
   return (
     <div className="overflow-x-auto px-4 py-2">
@@ -102,6 +107,41 @@ function ShopTabs() {
   )
 }
 
+/** Logo officiel Gesa (pack design : G + pin + colis). */
+export function BrandLogo({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  const cls = size === 'sm' ? 'h-8 w-8' : 'h-9 w-9'
+  return <img src="/icon-192.png" alt="Gesa" className={`${cls} shrink-0 rounded-xl`} />
+}
+
+/** Bascule clair / sombre (un clic inverse, le détail est dans Mon compte). */
+export function ThemeToggle({ compact }: { compact?: boolean }) {
+  const [theme, setTheme] = useTheme()
+  const dark = theme === 'sombre'
+  const next: ThemeMode = dark ? 'clair' : 'sombre'
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(next)}
+      title={dark ? 'Passer en mode clair' : 'Passer en mode sombre'}
+      aria-label={dark ? 'Passer en mode clair' : 'Passer en mode sombre'}
+      className={`inline-flex items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 ${
+        compact ? 'h-9 w-9' : 'h-10 w-10'
+      }`}
+    >
+      {dark ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+      ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 export function Shell({
   page,
   onNavigate,
@@ -111,22 +151,16 @@ export function Shell({
   onNavigate: (p: PageKey) => void
   children: ReactNode
 }) {
-  const { toasts, dismissToast, mode } = useStore()
+  const { toasts, dismissToast, user } = useStore()
+  const [profile] = useProfile(user?.id)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
       {/* Barre latérale (ordinateur) */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex items-center gap-2 px-4 py-4">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-700 text-sm font-black text-white">
-            MB
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-bold text-slate-800">Ma Boutique</p>
-            <p className="text-[11px] text-slate-400">
-              {mode === 'supabase' ? 'Synchronisé' : 'Hors ligne'}
-            </p>
-          </div>
+          <BrandLogo />
+          <p className="text-sm font-bold leading-tight text-slate-800">Gesa</p>
         </div>
         <div className="px-4 pb-2">
           <NetworkStatus />
@@ -149,37 +183,50 @@ export function Shell({
           ))}
         </nav>
         <p className="px-4 py-4 text-[11px] text-slate-400">Devise : FCFA</p>
+        <div className="flex items-center gap-2 border-t border-slate-200 px-4 py-3">
+          {profile.photo ? (
+            <img
+              src={profile.photo}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-full border border-slate-200 object-cover"
+            />
+          ) : (
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-200 text-xs font-black text-slate-600">
+              {initials(profile.fullName, user?.email ?? '')}
+            </span>
+          )}
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-xs font-bold text-slate-700">{profile.fullName || 'Mon compte'}</p>
+            <p className="truncate text-[11px] text-slate-400">{user?.email ?? ''}</p>
+          </div>
+          <ThemeToggle compact />
+        </div>
       </aside>
 
       <div className="lg:pl-56">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 pt-3 lg:hidden">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-700 text-sm font-black text-white">
-                MB
-              </span>
-              <div className="leading-tight">
-                <p className="text-sm font-bold text-slate-800">Ma Boutique</p>
-                <p className="text-[11px] text-slate-400">
-                  {mode === 'supabase' ? 'Synchronisé (Supabase)' : 'Hors ligne (navigateur)'}
-                </p>
-              </div>
+              <BrandLogo size="sm" />
+              <p className="text-sm font-bold leading-tight text-slate-800">Gesa</p>
             </div>
+            <ThemeToggle compact />
           </div>
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 pb-1 lg:hidden">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Boutiques</span>
+          <div className="mx-auto flex max-w-5xl items-center justify-end gap-2 px-4 pb-1 lg:hidden">
             <NetworkStatus />
           </div>
-          <div className="mx-auto max-w-5xl">
-            <ShopTabs />
-          </div>
+          {page !== 'compte' && (
+            <div className="mx-auto max-w-5xl">
+              <ShopTabs />
+            </div>
+          )}
         </header>
 
         <main className="mx-auto max-w-5xl px-4 py-4">{children}</main>
       </div>
 
       {/* Navigation en bas (mobile) */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto grid max-w-5xl grid-cols-6">
           {NAV.map((n) => (
             <button

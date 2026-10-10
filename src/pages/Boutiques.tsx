@@ -12,8 +12,8 @@ import {
   SectionTitle,
   StatCard,
 } from '../components/ui'
-import { exportSalesExcel, exportStockPDF } from '../lib/exports'
-import { ROLE_LABEL, canManageMembers, canRenameShop, canDeleteShop, canSeeFinances, canExport, roleOf } from '../lib/permissions'
+import { ExportMenu } from '../components/ExportMenu'
+import { ROLE_LABEL, atLeast, canManageMembers, canRenameShop, canDeleteShop, canSeeFinances, canExport, roleOf } from '../lib/permissions'
 
 export function Boutiques() {
   const {
@@ -30,6 +30,7 @@ export function Boutiques() {
     deleteRestock,
     updateRestock,
     restore,
+    purge,
     notify,
     resetDemo,
     logout,
@@ -41,6 +42,7 @@ export function Boutiques() {
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
   const [editRestock, setEditRestock] = useState<Restock | null>(null)
   const [deleteRestockTarget, setDeleteRestockTarget] = useState<Restock | null>(null)
+  const [purgeTarget, setPurgeTarget] = useState<{ kind: 'items' | 'shops' | 'customers'; id: string; label: string } | null>(null)
 
   const restockRows = useMemo(
     () => [...restocks].sort((a, b) => b.restock_date.localeCompare(a.restock_date)),
@@ -53,15 +55,15 @@ export function Boutiques() {
   const seeMoney = canSeeFinances(myRole)
   const [invite, setInvite] = useState<{ shopId: string; email: string; role: 'gerant' | 'vendeur' } | null>(null)
 
-  // Suppressions douces des 30 derniers jours (restaurables)
+  // Suppressions douces des 30 derniers jours (restaurables ou purgeables)
   const trash = useMemo(() => {
     const cutoff = Date.now() - 30 * 86400000
-    const rows: { key: string; id: string; kind: 'items' | 'shops' | 'customers'; label: string; type: string; date: string }[] = []
-    const push = (kind: 'items' | 'shops' | 'customers', type: string, r: { id: string; name: string; deleted_at: string | null }) => {
+    const rows: { key: string; id: string; kind: 'items' | 'shops' | 'customers'; label: string; type: string; date: string; shopId: string }[] = []
+    const push = (kind: 'items' | 'shops' | 'customers', type: string, r: { id: string; name: string; deleted_at: string | null; shop_id?: string }) => {
       if (!r.deleted_at) return
       const ts = Date.parse(r.deleted_at)
       if (Number.isNaN(ts) || ts < cutoff) return
-      rows.push({ key: `${kind}-${r.id}`, id: r.id, kind, label: r.name, type, date: r.deleted_at.slice(0, 10) })
+      rows.push({ key: `${kind}-${r.id}`, id: r.id, kind, label: r.name, type, date: r.deleted_at.slice(0, 10), shopId: kind === 'shops' ? r.id : (r.shop_id ?? '') })
     }
     db.items.forEach((i) => push('items', 'Article', i))
     db.shops.forEach((s) => push('shops', 'Boutique', s))
@@ -85,7 +87,7 @@ export function Boutiques() {
                     {db.sales.filter((x) => x.shop_id === s.id).length} vente(s)
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex max-w-[62%] shrink-0 flex-wrap justify-end gap-2">
                   {canRenameShop(roleOf(db, user?.id ?? '', s.id)) && (
                     <Button variant="secondary" onClick={() => setRenaming({ id: s.id, name: s.name })}>
                       Renommer
@@ -132,7 +134,7 @@ export function Boutiques() {
 
       {/* Équipe (rôles par boutique) */}
       <section>
-        <SectionTitle>Équipe — {shopLabel}</SectionTitle>
+        <SectionTitle>Équipe : {shopLabel}</SectionTitle>
         <Card>
           {scope === 'all' ? (
             <p className="text-sm text-slate-500">
@@ -192,7 +194,7 @@ export function Boutiques() {
 
       {/* Réapprovisionnements */}
       <section>
-        <SectionTitle>Réapprovisionnements — {shopLabel}</SectionTitle>
+        <SectionTitle>Réapprovisionnements : {shopLabel}</SectionTitle>
         <Card className="p-0">
           {restockRows.length === 0 ? (
             <p className="p-4 text-sm text-slate-500">
@@ -242,39 +244,9 @@ export function Boutiques() {
       {/* Exports */}
       {canExport(myRole) && (
       <section>
-        <SectionTitle>Exporter — {shopLabel}</SectionTitle>
+        <SectionTitle>Exporter : {shopLabel}</SectionTitle>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              try {
-                exportSalesExcel(
-                  scope === 'all' ? db.sales : db.sales.filter((s) => s.shop_id === scope),
-                  scope === 'all' ? db.credits : db.credits.filter((c) => c.shop_id === scope),
-                  items,
-                  db,
-                )
-                notify('Fichier Excel téléchargé')
-              } catch (e) {
-                notify(e instanceof Error ? e.message : 'Export impossible', 'error')
-              }
-            }}
-          >
-            Ventes + crédits + stock → Excel
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              try {
-                exportStockPDF(items, db, shopLabel)
-                notify('Fiche stock PDF téléchargée')
-              } catch (e) {
-                notify(e instanceof Error ? e.message : 'Export impossible', 'error')
-              }
-            }}
-          >
-            Fiche stock → PDF
-          </Button>
+          <ExportMenu />
         </div>
       </section>
       )}
@@ -285,14 +257,17 @@ export function Boutiques() {
         {trash.length === 0 ? (
           <Card>
             <p className="text-sm text-slate-500">
-              Aucun élément supprimé. Une suppression reste annulable pendant 30 jours : rien n’est effacé
-              définitivement, l’historique des ventes est toujours conservé.
+              Aucun élément supprimé. Une suppression reste annulable pendant 30 jours. « Supprimer » efface
+              définitivement (boutique : tout son contenu ; article : réappros et paliers, ventes conservées).
             </p>
           </Card>
         ) : (
           <Card className="p-0">
             <ul className="divide-y divide-slate-100">
-              {trash.map((t) => (
+              {trash.map((t) => {
+                const rowRole = roleOf(db, user?.id ?? '', t.shopId, user?.email)
+                const canPurge = t.kind === 'shops' ? rowRole === 'proprietaire' : atLeast(rowRole, 'gerant')
+                return (
                 <li key={t.key} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-slate-700">{t.label}</span>
@@ -300,15 +275,27 @@ export function Boutiques() {
                       {t.type} · supprimé le {t.date}
                     </span>
                   </span>
-                  <Button
-                    variant="secondary"
-                    className="shrink-0 px-3 py-1.5 text-xs"
-                    onClick={() => void restore(t.kind, t.id)}
-                  >
-                    Restaurer
-                  </Button>
+                  <span className="flex shrink-0 gap-2">
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      onClick={() => void restore(t.kind, t.id)}
+                    >
+                      Restaurer
+                    </Button>
+                    {canPurge && (
+                      <Button
+                        variant="ghost"
+                        className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                        onClick={() => setPurgeTarget({ kind: t.kind, id: t.id, label: t.label })}
+                      >
+                        Supprimer
+                      </Button>
+                    )}
+                  </span>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           </Card>
         )}
@@ -317,10 +304,7 @@ export function Boutiques() {
       {/* Données / compte */}
       <section>
         <SectionTitle>Données et compte</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Mode de données" value={mode === 'supabase' ? 'Supabase' : 'Hors ligne'} sub={mode === 'supabase' ? 'Synchronisé' : 'Stocké dans ce navigateur'} />
-          <StatCard label="Compte" value={user?.email ?? '—'} />
-        </div>
+        <StatCard label="Compte" value={user?.email ?? '—'} />
         <div className="mt-3 flex flex-wrap gap-2">
           {mode === 'local' && (
             <Button
@@ -337,9 +321,8 @@ export function Boutiques() {
           </Button>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          En mode hors ligne, les données sont gardées dans ce navigateur. Ajoute les clés Supabase dans le fichier
-          <code className="mx-1 rounded bg-slate-100 px-1">.env</code> puis relance l’app pour activer la
-          synchronisation multi-appareils avec connexion et sécurité (RLS).
+          Tes données sont gardées dans ce navigateur. Connecte-toi avec ton compte pour les retrouver sur tes
+          autres appareils, en sécurité.
         </p>
       </section>
 
@@ -446,6 +429,25 @@ export function Boutiques() {
           setDeleteRestockTarget(null)
         }}
         onCancel={() => setDeleteRestockTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={purgeTarget !== null}
+        title="Supprimer définitivement ?"
+        message={
+          purgeTarget?.kind === 'shops'
+            ? `La boutique « ${purgeTarget?.label ?? ''} » et TOUT son contenu (articles, ventes, crédits, membres) seront effacés définitivement. Irréversible.`
+            : purgeTarget?.kind === 'items'
+              ? `L’article « ${purgeTarget?.label ?? ''} » sera effacé définitivement (réappros et paliers avec lui, ventes conservées). Irréversible.`
+              : `Le client « ${purgeTarget?.label ?? ''} » sera effacé définitivement (historique conservé). Irréversible.`
+        }
+        confirmLabel="Supprimer définitivement"
+        onConfirm={() => {
+          const t = purgeTarget
+          setPurgeTarget(null)
+          if (t) void purge(t.kind, t.id).catch((e: Error) => notify(e.message, 'error'))
+        }}
+        onCancel={() => setPurgeTarget(null)}
       />
     </div>
   )

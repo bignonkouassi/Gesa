@@ -26,21 +26,89 @@ import {
   type YearSummary,
 } from '../lib/calc'
 import { addDays, fcfa, num, parseISO, pct, toISO, todayISO } from '../lib/format'
-import { Button, Card, Delta, EmptyState, SectionTitle, Segmented, StatCard } from '../components/ui'
-import { exportSalesExcel, exportStockPDF } from '../lib/exports'
+import { Button, Card, Delta, EmptyState, Field, Input, SectionTitle, Segmented, StatCard } from '../components/ui'
+import { greetingLine } from '../lib/greeting'
+import { useProfile } from '../lib/profile'
 import { FicheButton } from '../components/FicheButton'
+import { ExportMenu } from '../components/ExportMenu'
 import { slug } from '../lib/fiche'
 import { canExport, canSeeFinances } from '../lib/permissions'
 import type { PageKey } from '../components/Shell'
 
 export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) {
-  const { db, scope, notify, role } = useStore()
+  const { db, scope, notify, role, user, addShop, setScope } = useStore()
+  const [profile] = useProfile(user?.id)
   const seeMoney = canSeeFinances(role)
   const { items, sales, restocks, credits, payments } = useScopedDB()
   const [mode, setMode] = useState<RangeMode>('semaine')
   const [topKey, setTopKey] = useState<'quantity' | 'profit' | 'margin'>('quantity')
   const [year, setYear] = useState(() => new Date().getFullYear())
+  const [shopName, setShopName] = useState('')
+  const [shopBusy, setShopBusy] = useState(false)
   const today = todayISO()
+
+  const activeShops = db.shops.filter((s) => !s.deleted_at)
+  const scopeLabel =
+    scope === 'all' ? 'Toutes les boutiques' : (db.shops.find((s) => s.id === scope)?.name ?? '')
+  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  /* Première visite : on crée d'abord une boutique, avant toute donnée */
+  const createFirstShop = async () => {
+    if (!shopName.trim()) {
+      notify('Donne un nom à ta boutique pour commencer.', 'error')
+      return
+    }
+    setShopBusy(true)
+    try {
+      const id = await addShop(shopName.trim())
+      setScope(id)
+      setShopName('')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Création impossible.', 'error')
+    } finally {
+      setShopBusy(false)
+    }
+  }
+
+  const header = (
+    <div>
+      <h1 className="text-xl font-black text-slate-800">{greetingLine(profile.fullName)} !</h1>
+      <p className="mt-0.5 text-xs text-slate-500">
+        <span className="capitalize">{todayLabel}</span>
+        {activeShops.length > 0 && scopeLabel ? ` · ${scopeLabel}` : ''}
+      </p>
+    </div>
+  )
+
+  const welcome = (
+    <div className="space-y-5">
+      {header}
+      <Card>
+        <SectionTitle>Bienvenue sur Gesa</SectionTitle>
+        <p className="text-sm text-slate-600">
+          Pour commencer, crée ta première boutique. Ensuite tu pourras y ajouter tes articles, enregistrer tes
+          ventes et suivre tes crédits.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <Field label="Nom de ta première boutique">
+            <Input
+              type="text"
+              maxLength={60}
+              placeholder="Ex. Boutique Épicerie"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void createFirstShop()
+              }}
+            />
+          </Field>
+          <Button disabled={shopBusy || !shopName.trim()} onClick={() => void createFirstShop()}>
+            {shopBusy ? 'Création…' : 'Créer ma boutique'}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  )
 
   const chart = useMemo(
     () => buildChart(db, scope === 'all' ? null : scope, mode, year),
@@ -81,8 +149,12 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) 
 
   const noData = sales.length === 0
 
+  /* Première visite : la création de la boutique passe avant tout le reste */
+  if (activeShops.length === 0) return welcome
+
   return (
     <div className="space-y-5">
+      {header}
       {/* Alertes */}
       {lateCredits.length > 0 && (
         <button
@@ -91,7 +163,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) 
           className="flex w-full items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left"
         >
           <span className="text-sm font-semibold text-red-700">
-            {lateCredits.length} crédit{lateCredits.length > 1 ? 's' : ''} en retard —{' '}
+            {lateCredits.length} crédit{lateCredits.length > 1 ? 's' : ''} en retard :{' '}
             {fcfa(lateCredits.reduce((a, c) => a + (c.total_amount - c.amount_paid), 0))} à récupérer
           </span>
           <span className="text-xs font-bold text-red-700">Voir →</span>
@@ -143,8 +215,8 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) 
         </div>
         {seeMoney && (
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatCard label="Dépenses de réappro — semaine" value={fcfa(weekStats.spent)} tone="warn" />
-          <StatCard label="Dépenses de réappro — total" value={fcfa(totalStats.spent)} tone="warn" />
+          <StatCard label="Dépenses de réappro : semaine" value={fcfa(weekStats.spent)} tone="warn" />
+          <StatCard label="Dépenses de réappro : total" value={fcfa(totalStats.spent)} tone="warn" />
         </div>
         )}
       </section>
@@ -299,6 +371,55 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) 
         </Card>
       </section>
 
+      {/* Ventes en gros : seulement si un article a l'option active.
+          Ne comptent que les ventes « Un seul client » avec palier appliqué. */}
+      {db.items.some((i) => !i.deleted_at && i.tiered_pricing) && (
+        <section>
+          <SectionTitle>Ventes en gros</SectionTitle>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              label="Ventes au prix de gros"
+              value={num(sales.filter((s) => (s.sale_mode ?? 'un_client') === 'un_client' && s.tier_min_quantity != null).length)}
+              sub={`${fcfa(sales.filter((s) => (s.sale_mode ?? 'un_client') === 'un_client' && s.tier_min_quantity != null).reduce((a, s) => a + s.unit_price * s.quantity, 0))} de chiffre d’affaires`}
+              tone="good"
+            />
+            <StatCard
+              label="Ventes au prix normal"
+              value={num(sales.filter((s) => s.tier_min_quantity == null && !s.price_overridden).length)}
+              sub={`${fcfa(sales.filter((s) => s.tier_min_quantity == null && !s.price_overridden).reduce((a, s) => a + s.unit_price * s.quantity, 0))} de chiffre d’affaires`}
+            />
+          </div>
+          {(() => {
+            const grosItems = db.items
+              .filter((i) => !i.deleted_at && sales.some((s) => s.item_id === i.id && (s.sale_mode ?? 'un_client') === 'un_client' && s.tier_min_quantity != null))
+              .slice(0, 8)
+            if (grosItems.length === 0) return null
+            return (
+          <Card className="mt-3 p-0">
+            <ul className="divide-y divide-slate-100">
+              {grosItems.map((i) => {
+                  const rows = sales.filter((s) => s.item_id === i.id)
+                  const gros = rows.filter((s) => s.tier_min_quantity != null)
+                  const normal = rows.filter((s) => s.tier_min_quantity == null)
+                  const rev = (rs: typeof rows) => rs.reduce((a, s) => a + s.unit_price * s.quantity, 0)
+                  const prof = (rs: typeof rows) => rs.reduce((a, s) => a + (s.unit_price - s.unit_cost) * s.quantity, 0)
+                  return (
+                    <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                      <span className="min-w-0 truncate font-medium text-slate-700">{i.name}</span>
+                      <span className="shrink-0 text-right text-xs text-slate-500">
+                        <span className="block">Normal : <b className="text-slate-800">{fcfa(rev(normal))}</b>{seeMoney ? ` · bénéf ${fcfa(prof(normal))}` : ''}</span>
+                        <span className="block">Gros : <b className="text-emerald-700">{fcfa(rev(gros))}</b>{seeMoney ? ` · bénéf ${fcfa(prof(gros))}` : ''}</span>
+                      </span>
+                    </li>
+                  )
+                })}
+            </ul>
+          </Card>
+            )
+          })()}
+        </section>
+      )}
+
       {/* Valeur du stock */}
       {seeMoney && (
       <section>
@@ -314,32 +435,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (p: PageKey) => void }) 
       <section>
         <SectionTitle>Exporter</SectionTitle>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => {
-              try {
-                exportSalesExcel(sales, credits, items, db)
-                notify('Fichier Excel téléchargé')
-              } catch (e) {
-                notify(e instanceof Error ? e.message : 'Export impossible', 'error')
-              }
-            }}
-          >
-            Ventes → Excel
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              try {
-                exportStockPDF(items, db, scope === 'all' ? 'Toutes les boutiques' : (db.shops.find((s) => s.id === scope)?.name ?? 'Boutique'))
-                notify('Fiche stock PDF téléchargée')
-              } catch (e) {
-                notify(e instanceof Error ? e.message : 'Export impossible', 'error')
-              }
-            }}
-          >
-            Fiche stock → PDF
-          </Button>
+          <ExportMenu />
         </div>
       </section>
       )}

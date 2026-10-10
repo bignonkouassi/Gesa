@@ -1,7 +1,7 @@
-# Ma Boutique — Gestion de stock multi-boutiques
+# Ma Boutique : Gestion de stock multi-boutiques
 
 Application web **100 % en français**, simple et **mobile d’abord**, pour aider un commerçant à suivre
-ses stocks, ses ventes, ses bénéfices réels, ses réapprovisionnements et les crédits de ses clients —
+ses stocks, ses ventes, ses bénéfices réels, ses réapprovisionnements et les crédits de ses clients :
 par semaine, par mois et par année, pour une ou plusieurs boutiques (ex. « Boutique Eau »,
 « Boutique Cuisine »).
 
@@ -12,7 +12,7 @@ par semaine, par mois et par année, pour une ou plusieurs boutiques (ex. « Bou
 | **Tableau de bord** | Alertes (crédits en retard, stock bas/rupture), bénéfices du jour / semaine / mois / total, CA vs bénéfice vs dépenses de réappro, graphique à bascule **Semaine / Mois / Année** (+ sélecteur d’année et **bilan annuel** complet quand « Année » est choisi), bénéfice encaissé vs en attente, Top 5, valeur du stock, bouton **Télécharger la fiche** |
 | **Ventes** | Saisie des ventes du jour par article (comptant / crédit), prix de vente éditable en ligne, réapprovisionnement, recherche, « Annuler la dernière vente » |
 | **Crédits** | Cartes (en cours, remboursé ce mois, débiteurs, en retard), filtres, fiche client, remboursements, relance WhatsApp |
-| **Historique** | 5 onglets — **Ventes**, **Réappro.**, **Crédits et remboursements**, **Mouvements de stock**, **Périodes** (liste des semaines et des mois avec CA, bénéfice, dépenses, ventes, détail au clic) + filtres (période, article, client, recherche) et tri (date, montant, bénéfice) + fiche de chaque période |
+| **Historique** | 5 onglets : **Ventes**, **Réappro.**, **Crédits et remboursements**, **Mouvements de stock**, **Périodes** (liste des semaines et des mois avec CA, bénéfice, dépenses, ventes, détail au clic) + filtres (période, article, client, recherche) et tri (date, montant, bénéfice) + fiche de chaque période |
 | **Boutiques** | Créer / renommer / supprimer, historique des réappro à corriger, exports, données et compte |
 
 Navigation : **barre latérale sur ordinateur**, **5 onglets en bas sur mobile**, onglets de boutique
@@ -22,7 +22,7 @@ en haut (+ « Toutes les boutiques » qui additionne tout). Couleur principale *
 ## Schéma de données
 
 8 tables (voir [`supabase/schema.sql`](supabase/schema.sql)) : `shops`, `items`, `restocks`,
-`customers`, `sales`, `credits`, `credit_payments`, `stock_movements` — plus, côté application,
+`customers`, `sales`, `credits`, `credit_payments`, `stock_movements` : plus, côté application,
 `items.opening_stock` / `items.opening_cost` (stock et coût initiaux, indispensables pour
 recalculer exactement après la correction d’un réappro) et `stock_movements.ref_id`.
 
@@ -46,7 +46,7 @@ Le script SQL fournit aussi **les vues et fonctions de calcul** :
 - `check_stock_consistency()` : compare chaque stock au rejeu complet des événements
   (résultat vide = tout est cohérent).
 
-**Opérations transactionnelles (RPC)** — une seule requête SQL par opération, avec verrouillage
+**Opérations transactionnelles (RPC)** : une seule requête SQL par opération, avec verrouillage
 de la ligne (`select … for update`) : `record_sale`, `record_restock`, `update_restock`,
 `delete_restock`, `record_credit_payment`, `cancel_sale`. Le serveur revérifie stock, rôles et
 montants dans la même transaction : pas de survente possible, pas de mise à jour en plusieurs

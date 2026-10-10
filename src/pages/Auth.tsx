@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { Button, Card, Field, Input } from '../components/ui'
-import { emailInput, isCommonPassword, parseOrThrow, passwordInput, passwordStrength } from '../lib/validation'
+import { BrandLogo } from '../components/Shell'
+import { emailInput, firstNameInput, isCommonPassword, lastNameInput, parseOrThrow, passwordInput, passwordStrength } from '../lib/validation'
+import { savePendingProfile } from '../lib/profile'
 import { recordLogin } from './Compte'
 
 /** Blocage temporaire après plusieurs échecs (anti force brute côté client) */
@@ -29,6 +31,8 @@ export function Auth() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [first, setFirst] = useState('')
+  const [last, setLast] = useState('')
   const [busy, setBusy] = useState(false)
   const [info, setInfo] = useState('')
   const [lockLeft, setLockLeft] = useState(0)
@@ -70,9 +74,14 @@ export function Auth() {
       parseOrThrow(emailInput, email, 'E-mail')
       if (mode === 'signup') {
         parseOrThrow(passwordInput, password, 'Mot de passe')
-        const msg = await signUp(email.trim(), password)
+        const cleanFirst = parseOrThrow(firstNameInput, first, 'Prénom')
+        const cleanLast = parseOrThrow(lastNameInput, last, 'Nom')
+        const fullName = `${cleanFirst} ${cleanLast}`.trim().replace(/\s+/g, ' ')
+        const msg = await signUp(email.trim(), password, fullName)
+        // Le nom est déjà enregistré : la salutation reconnaîtra l'utilisateur dès sa première entrée
+        savePendingProfile(email.trim(), fullName)
         if (msg) setInfo(msg)
-        else notify('Compte créé, connecté.')
+        else notify(`Compte créé, bienvenue ${cleanFirst} !`)
       } else {
         if (password.length < 8) throw new Error('E-mail ou mot de passe incorrect.')
         await signIn(email.trim(), password)
@@ -104,11 +113,9 @@ export function Auth() {
     <div className="grid min-h-screen place-items-center bg-slate-50 px-4">
       <Card className="w-full max-w-sm">
         <div className="mb-4 flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-700 text-sm font-black text-white">
-            MB
-          </span>
+          <BrandLogo />
           <div>
-            <p className="text-sm font-bold text-slate-800">Ma Boutique</p>
+            <p className="text-sm font-bold text-slate-800">Gesa</p>
             <p className="text-xs text-slate-500">Gestion de stock multi-boutiques</p>
           </div>
         </div>
@@ -131,6 +138,30 @@ export function Auth() {
         </div>
 
         <div className="space-y-3">
+          {mode === 'signup' && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Prénom">
+                <Input
+                  type="text"
+                  autoComplete="given-name"
+                  maxLength={40}
+                  value={first}
+                  onChange={(e) => setFirst(e.target.value)}
+                  placeholder="Ex. Awa"
+                />
+              </Field>
+              <Field label="Nom">
+                <Input
+                  type="text"
+                  autoComplete="family-name"
+                  maxLength={40}
+                  value={last}
+                  onChange={(e) => setLast(e.target.value)}
+                  placeholder="Ex. Kouassi"
+                />
+              </Field>
+            </div>
+          )}
           <Field label="E-mail">
             <Input
               type="email"
@@ -185,7 +216,12 @@ export function Auth() {
 
           <Button
             className="w-full"
-            disabled={busy || locked || !email || (mode === 'signup' ? password.length < 8 : password.length < 1)}
+            disabled={
+              busy ||
+              locked ||
+              !email ||
+              (mode === 'signup' ? password.length < 8 || !first.trim() : password.length < 1)
+            }
             onClick={submit}
           >
             {busy ? 'Vérification…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}

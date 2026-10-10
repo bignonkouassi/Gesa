@@ -24,6 +24,8 @@ const makeItem = (over: Partial<Item> = {}): Item => ({
   low_stock_threshold: 5,
   opening_stock: 0,
   opening_cost: 0,
+  tiered_pricing: false,
+  tier_mode: 'palier',
   created_at: '2026-01-01T08:00:00.000Z',
   deleted_at: null,
   ...over,
@@ -53,6 +55,10 @@ const makeSale = (over: Partial<Sale> = {}): Sale => ({
   customer_id: null,
   sale_date: '2026-01-03',
   created_at: '2026-01-03T10:00:00.000Z',
+  tier_min_quantity: null,
+  sale_mode: null,
+  price_overridden: false,
+  override_note: null,
   ...over,
 })
 

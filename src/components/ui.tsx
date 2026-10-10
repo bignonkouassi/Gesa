@@ -69,7 +69,7 @@ export function StatCard({
   return (
     <Card className="min-w-0">
       <p className="truncate text-xs font-medium text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-lg font-bold tabular-nums ${toneCls}`}>{value}</p>
+      <p className={`mt-1 truncate text-base font-bold tabular-nums sm:text-lg ${toneCls}`}>{value}</p>
       {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
     </Card>
   )
@@ -255,7 +255,7 @@ export function EmptyState({ title, hint, action }: { title: string; hint?: stri
 }
 
 export function Delta({ pct, label }: { pct: number | null; label: string }) {
-  if (pct === null) return <span className="text-xs text-slate-400">— {label}</span>
+  if (pct === null) return <span className="text-xs text-slate-400">{label}</span>
   const up = pct >= 0
   return (
     <span className={`text-xs font-semibold ${up ? 'text-emerald-600' : 'text-red-600'}`}>

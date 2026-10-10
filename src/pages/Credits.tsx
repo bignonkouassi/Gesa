@@ -6,6 +6,7 @@ import { fcfa, formatDateFr, formatDateShort, num, todayISO } from '../lib/forma
 import { Button, Card, EmptyState, Field, Input, Modal, SectionTitle, Segmented, StatCard, Badge } from '../components/ui'
 import { exportCustomerPDF } from '../lib/exports'
 import { canManageCredits } from '../lib/permissions'
+import { ChatIcon, PhoneIcon } from '../components/icons'
 
 type Filter = 'tous' | 'en cours' | 'partiellement payé' | 'soldé' | 'en retard'
 
@@ -133,7 +134,7 @@ export function Credits() {
                   {credit.due_date && (
                     <p className={`mt-2 text-xs font-semibold ${status === 'en retard' ? 'text-red-600' : 'text-slate-500'}`}>
                       Échéance : {formatDateFr(credit.due_date)}
-                      {status === 'en retard' ? ' — dépassée' : ''}
+                      {status === 'en retard' ? ' : dépassée' : ''}
                     </p>
                   )}
 
@@ -142,7 +143,7 @@ export function Credits() {
                       <>
                         <Button onClick={() => setPaying(credit)}>Rembourser</Button>
                         <Button variant="secondary" onClick={() => openWhatsApp(credit)}>
-                          💬 Relancer sur WhatsApp
+                          <ChatIcon /> Relancer sur WhatsApp
                         </Button>
                       </>
                     ) : (
@@ -286,8 +287,11 @@ function CustomerSheet({ customerId, onClose }: { customerId: string | null; onC
         <p className="text-sm text-slate-500">Client introuvable.</p>
       ) : (
         <div className="space-y-4">
-          <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            📞 {customer.phone || '—'} · <b className="text-orange-700">Total dû : {fcfa(totalDue)}</b>
+          <div className="flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <PhoneIcon className="shrink-0 text-slate-400" />
+            <span className="truncate">{customer.phone || '—'}</span>
+            <span aria-hidden="true">·</span>
+            <b className="text-orange-700">Total dû : {fcfa(totalDue)}</b>
           </div>
 
           <div>

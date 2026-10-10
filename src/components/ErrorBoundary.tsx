@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { WarningIcon } from './icons'
 
 interface Props {
   children: ReactNode
@@ -29,7 +30,9 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="grid min-h-screen place-items-center bg-slate-50 px-6">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-            <p className="text-3xl">⚠️</p>
+            <p className="flex justify-center text-amber-500">
+              <WarningIcon size={32} />
+            </p>
             <h1 className="mt-3 text-lg font-bold text-slate-800">Une erreur est survenue</h1>
             <p className="mt-2 text-sm text-slate-500">
               Tes données sont en sécurité : rien n’a été perdu. Tu peux réessayer ou recharger l’application.

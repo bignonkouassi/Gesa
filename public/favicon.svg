@@ -1,4 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#059669" />
-  <text x="32" y="43" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="700" fill="#ffffff" text-anchor="middle">MB</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00BE87"/>
+      <stop offset="1" stop-color="#007A5C"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#g)"/>
+  <path d="M49 13H27C16 13 10 21 10 31v12c0 3 1 5 3 7V31c0-7 5-12 13-12h17c3 0 5-2 6-6Z" fill="#fff"/>
+  <path d="M23 27c1 5 5 8 10 8h6c6 0 10 5 10 11 0 2-1 4-2 5 4-2 6-6 6-11 0-9-6-15-15-15H23Z" fill="#fff"/>
+  <g fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round">
+    <path d="M13 44l6-3 6 3v8l-6 3-6-3z"/>
+    <path d="M13 44l6 3 6-3M19 47v8"/>
+    <path d="M27 43l6-3 6 3v8l-6 3-6-3z"/>
+    <path d="M27 43l6 3 6-3M33 46v8"/>
+    <path d="M41 43l6-3 6 3v8l-6 3-6-3z"/>
+    <path d="M41 43l6 3 6-3M47 46v8"/>
+  </g>
+  <path d="M17 42c-3-4-3-6 0-8 3 0 4 2 4 4l-4 4Z" fill="#fff"/>
+  <circle cx="17.5" cy="37.5" r="1.1" fill="#008B68"/>
 </svg>

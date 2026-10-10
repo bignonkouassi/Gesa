@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
-import { Button, Card, ConfirmDialog, Field, Input, SectionTitle, Select, Modal } from '../components/ui'
+import { Button, Card, ConfirmDialog, Field, Input, SectionTitle, Select, Modal, Segmented } from '../components/ui'
 import { PageActions } from '../components/Shell'
+import { useTheme } from '../lib/theme'
+import {
+  initials,
+  processPhotoFile,
+  readSupabaseMetadata,
+  saveProfile,
+  syncProfileToSupabase,
+  useProfile,
+} from '../lib/profile'
 import { isCommonPassword, parseOrThrow, passwordInput, passwordStrength } from '../lib/validation'
 import { clearPin, isPinFormat, readPinConfig, setPin } from '../lib/pin'
 import { exportAllCSV, exportAllExcel, exportAllJSON } from '../lib/exports'
@@ -34,6 +43,30 @@ function readLogins(): LoginEvent[] {
 
 export function Compte() {
   const { user, db, mode, logout, notify } = useStore()
+  const [theme, setTheme] = useTheme()
+  const [profile, refreshProfile] = useProfile(user?.id)
+
+  const [fullName, setFullName] = useState(profile.fullName)
+  const [phone, setPhone] = useState(profile.phone)
+  const [photo, setPhoto] = useState<string | null>(profile.photo)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  /* Pré-remplit depuis les métadonnées Supabase si aucun profil local */
+  useEffect(() => {
+    if (mode !== 'supabase') return
+    if (profile.fullName || profile.phone) return
+    let alive = true
+    void readSupabaseMetadata().then((m) => {
+      if (!alive) return
+      if (m.fullName) setFullName(m.fullName)
+      if (m.phone) setPhone(m.phone)
+    })
+    return () => {
+      alive = false
+    }
+  }, [mode, profile.fullName, profile.phone])
 
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -63,7 +96,7 @@ export function Compte() {
       parseOrThrow(passwordInput, next, 'Nouveau mot de passe')
       if (isCommonPassword(next)) throw new Error('Ce mot de passe est trop courant. Choisis-en un autre.')
       if (mode !== 'supabase') {
-        throw new Error('Mode hors ligne : le mot de passe se change avec un compte Supabase connecté.')
+        throw new Error('Connecte-toi avec ton compte pour changer le mot de passe.')
       }
       const { changePasswordSupabase } = await import('../lib/repo')
       await changePasswordSupabase(current, next)
@@ -98,6 +131,34 @@ export function Compte() {
     notify('Verrouillage par code désactivé.')
   }
 
+  /* ---------------- Profil (photo, nom, téléphone) ---------------- */
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return
+    setPhotoBusy(true)
+    try {
+      setPhoto(await processPhotoFile(file))
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Photo invalide.', 'error')
+    } finally {
+      setPhotoBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const saveUserProfile = async () => {
+    setSavingProfile(true)
+    try {
+      saveProfile(user?.id, { fullName: fullName.trim(), phone: phone.trim(), photo })
+      if (mode === 'supabase') await syncProfileToSupabase(fullName.trim(), phone.trim())
+      refreshProfile()
+      notify('Profil enregistré.')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Enregistrement impossible.', 'error')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   /* ---------------- Suppression du compte ---------------- */
   const deleteAccount = async () => {
     setConfirmDelete(false)
@@ -121,9 +182,6 @@ export function Compte() {
   return (
     <div>
       <PageActions>
-        <Button variant="secondary" onClick={() => window.print()}>
-          Imprimer la page
-        </Button>
         <Button variant="ghost" onClick={() => void logout()}>
           Se déconnecter
         </Button>
@@ -131,17 +189,45 @@ export function Compte() {
 
       <Card className="mb-4">
         <SectionTitle>Mon compte</SectionTitle>
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-semibold text-slate-500">E-mail</dt>
-            <dd className="font-medium text-slate-800">{user?.email ?? '—'}</dd>
+        {/* Identité : photo + nom affiché */}
+        <div className="flex items-center gap-4">
+          {photo ? (
+            <img
+              src={photo}
+              alt="Photo de profil"
+              className="h-20 w-20 shrink-0 rounded-full border border-slate-200 object-cover"
+            />
+          ) : (
+            <span className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-slate-200 text-xl font-black text-slate-600">
+              {initials(fullName, user?.email ?? '')}
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-base font-bold text-slate-800">{fullName.trim() || 'Mon compte'}</p>
+            <p className="truncate text-sm text-slate-500">{user?.email ?? '—'}</p>
+            {phone.trim() && <p className="truncate text-sm text-slate-500">{phone.trim()}</p>}
           </div>
-          <div>
-            <dt className="text-xs font-semibold text-slate-500">Mode</dt>
-            <dd className="font-medium text-slate-800">
-              {mode === 'supabase' ? 'Synchronisé (Supabase)' : 'Hors ligne (navigateur)'}
-            </dd>
-          </div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          aria-label="Choisir une photo de profil"
+          onChange={(e) => void pickPhoto(e.target.files?.[0])}
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="secondary" disabled={photoBusy} onClick={() => fileRef.current?.click()}>
+            {photoBusy ? '…' : photo ? 'Changer la photo' : 'Ajouter une photo'}
+          </Button>
+          {photo && (
+            <Button variant="ghost" onClick={() => setPhoto(null)}>
+              Retirer la photo
+            </Button>
+          )}
+        </div>
+        {/* Informations du compte */}
+        <dl className="mt-4 grid gap-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs font-semibold text-slate-500">Boutiques</dt>
             <dd className="font-medium text-slate-800">{db.shops.filter((s) => !s.deleted_at).length}</dd>
@@ -151,6 +237,54 @@ export function Compte() {
             <dd className="font-medium text-slate-800">{db.sales.length}</dd>
           </div>
         </dl>
+        {/* Modification : nom et téléphone */}
+        <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
+          <Field label="Nom et prénom">
+            <Input
+              type="text"
+              autoComplete="name"
+              maxLength={80}
+              placeholder="Ex. Awa Kouassi"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </Field>
+          <Field label="Numéro de téléphone" hint="Visible uniquement par toi, sur cet appareil.">
+            <Input
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              maxLength={30}
+              placeholder="Ex. +225 07 00 00 00 00"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="mt-3">
+          <Button disabled={savingProfile || photoBusy} onClick={() => void saveUserProfile()}>
+            {savingProfile ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Apparence : clair / sombre */}
+      <Card className="mb-4">
+        <SectionTitle>Apparence</SectionTitle>
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented
+            value={theme}
+            onChange={setTheme}
+            options={[
+              { value: 'clair', label: 'Clair' },
+              { value: 'sombre', label: 'Sombre' },
+              { value: 'auto', label: 'Auto' },
+            ]}
+          />
+          <p className="text-xs text-slate-500">
+            {theme === 'auto' ? 'Suit le réglage de ton téléphone ou ordinateur.' : `Mode ${theme} actif.`}
+          </p>
+        </div>
       </Card>
 
       {/* Changement de mot de passe */}
@@ -257,9 +391,9 @@ export function Compte() {
       <Card className="mb-4">
         <SectionTitle>Exporter toutes mes données</SectionTitle>
         <p className="text-sm text-slate-600">
-          Boutiques, articles, ventes, crédits, clients et historique — ta propre copie de sécurité.
+          Boutiques, articles, ventes, crédits, clients et historique : ta propre copie de sécurité.
         </p>
-        <PageActions>
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={() => exportAllExcel(db)}>Excel (.xlsx)</Button>
           <Button variant="secondary" onClick={() => exportAllCSV(db)}>
             CSV
@@ -267,7 +401,7 @@ export function Compte() {
           <Button variant="secondary" onClick={() => exportAllJSON(db)}>
             JSON (sauvegarde complète)
           </Button>
-        </PageActions>
+        </div>
       </Card>
 
       {/* Suppression du compte */}

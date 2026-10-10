@@ -112,6 +112,7 @@ function emptyLike(): DB {
   return {
     shops: [],
     items: [],
+    price_tiers: [],
     restocks: [],
     customers: [],
     sales: [],
@@ -221,10 +222,14 @@ export async function signInSupabase(email: string, password: string): Promise<A
   return { id: u.id, email: u.email ?? email }
 }
 
-export async function signUpSupabase(email: string, password: string): Promise<string> {
+export async function signUpSupabase(email: string, password: string, fullName = ''): Promise<string> {
   const sb = getSupabase()
   if (!sb) throw new Error('Supabase non configuré')
-  const { data, error } = await sb.auth.signUp({ email, password })
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName || undefined } },
+  })
   if (error) throw new Error(translateAuthError(error.message))
   if (!data.session) return 'Un e-mail de confirmation vient d’être envoyé. Confirme-le puis connecte-toi.'
   return ''

@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------- */
-/* Thème : vert émeraude principal + mode sombre automatique         */
-/* (selon le réglage système, via les variables de Tailwind v4)       */
+/* Thème : vert émeraude principal + mode sombre.                      */
+/* - sans choix (auto) : suit le réglage système                       */
+/* - data-theme="dark"/"light" sur <html> : forçage manuel             */
 /* ---------------------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     /* Surfaces */
     --color-white: #131c2f;
     --color-slate-50: #0b1220;
@@ -41,7 +42,51 @@
     --color-red-600: #fca5a5;
     --color-red-700: #fca5a5;
     --color-red-800: #fecaca;
+    color-scheme: dark;
   }
+}
+
+/* Forçage manuel depuis l'application (prioritaire sur le système) */
+:root[data-theme='dark'] {
+  /* Surfaces */
+  --color-white: #131c2f;
+  --color-slate-50: #0b1220;
+  --color-slate-100: #1a2438;
+  --color-slate-200: #2c3a54;
+  --color-slate-300: #40506e;
+  /* Textes */
+  --color-slate-400: #8493b0;
+  --color-slate-500: #9eacc7;
+  --color-slate-600: #bcc8db;
+  --color-slate-700: #d5ddec;
+  --color-slate-800: #e9eef7;
+  --color-slate-900: #f4f7fc;
+  /* Émeraude (primaire et badges) */
+  --color-emerald-50: #0f2f22;
+  --color-emerald-100: #14402e;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  /* Alertes */
+  --color-amber-50: #3a2e0a;
+  --color-amber-100: #4a3c10;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-orange-50: #3d2411;
+  --color-orange-100: #4a2c14;
+  --color-orange-600: #fdba74;
+  --color-orange-700: #fdba74;
+  --color-orange-800: #fed7aa;
+  --color-red-50: #3f1717;
+  --color-red-100: #4d1c1c;
+  --color-red-600: #fca5a5;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 :root {
@@ -84,4 +129,18 @@ input[type="number"]::-webkit-inner-spin-button {
 /* Tableaux lisibles sur petits écrans */
 .table-scroll {
   overflow-x: auto;
+}
+
+/* Impression : A4 paysage, en-têtes répétés, lignes jamais coupées */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    break-inside: avoid;
+  }
 }

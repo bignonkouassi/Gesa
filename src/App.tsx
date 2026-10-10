@@ -92,7 +92,7 @@ function Router() {
       {page === 'dashboard' && <Dashboard onNavigate={navigate} />}
       {page === 'ventes' && <Ventes />}
       {page === 'credits' && <Credits />}
-      {page === 'historique' && <Historique />}
+      {page === 'historique' && <Historique onNavigate={navigate} />}
       {page === 'boutiques' && <Boutiques />}
       {page === 'compte' && <Compte />}
       {!validPages.includes(page) && <NotFound onBack={backToDashboard} />}

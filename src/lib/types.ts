@@ -9,6 +9,11 @@ export interface Shop {
   deleted_at: string | null
 }
 
+export type TierMode = 'palier' | 'tranche'
+
+/** Cumul de la journée (prix normal) ou achat d'un seul client (palier) */
+export type SaleMode = 'cumul_jour' | 'un_client'
+
 export interface Item {
   id: ID
   shop_id: string
@@ -23,6 +28,10 @@ export interface Item {
   opening_stock: number
   /** Coût initial à la création */
   opening_cost: number
+  /** Prix par quantité activé (paliers conservés même si désactivé) */
+  tiered_pricing: boolean
+  /** 'palier' : tout au prix du palier · 'tranche' : prix par tranche */
+  tier_mode: TierMode
   created_at: string
   deleted_at: string | null
 }
@@ -67,6 +76,23 @@ export interface Sale {
   created_at: string
   /** Annulation douce : la vente est conservée (jamais supprimée) mais exclue des calculs et de l'écran */
   cancelled_at?: string | null
+  /** Palier appliqué (seuil), vide si prix normal ou modifié */
+  tier_min_quantity: number | null
+  /** Cumul du jour ou un seul client ; null pour les articles sans option */
+  sale_mode: SaleMode | null
+  /** Vrai si le prix a été modifié à la main (gérant+, note obligatoire) */
+  price_overridden: boolean
+  /** Motif du prix modifié */
+  override_note: string | null
+}
+
+/** Palier de prix : à partir de min_quantity, prix unitaire dégressif */
+export interface PriceTier {
+  id: ID
+  item_id: ID
+  min_quantity: number
+  unit_price: number
+  created_at: string
 }
 
 export type CreditStatus = 'en cours' | 'partiellement payé' | 'soldé' | 'en retard'
@@ -138,6 +164,7 @@ export interface ShopMember {
 export interface DB {
   shops: Shop[]
   items: Item[]
+  price_tiers: PriceTier[]
   restocks: Restock[]
   customers: Customer[]
   sales: Sale[]
@@ -151,6 +178,7 @@ export interface DB {
 export const emptyDB = (): DB => ({
   shops: [],
   items: [],
+  price_tiers: [],
   restocks: [],
   customers: [],
   sales: [],
@@ -166,6 +194,7 @@ export type TableName = keyof DB
 export const TABLES: TableName[] = [
   'shops',
   'items',
+  'price_tiers',
   'restocks',
   'customers',
   'sales',
@@ -179,6 +208,7 @@ export const TABLES: TableName[] = [
 export interface RowMap {
   shops: Shop
   items: Item
+  price_tiers: PriceTier
   restocks: Restock
   customers: Customer
   sales: Sale

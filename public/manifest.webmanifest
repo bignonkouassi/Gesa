@@ -1,7 +1,7 @@
 {
-  "name": "Ma Boutique — Gestion de stock",
-  "short_name": "Ma Boutique",
-  "description": "Gestion de stock, ventes et crédits pour commerçants — hors ligne, chiffres en FCFA.",
+  "name": "Gesa : Gestion de stock",
+  "short_name": "Gesa",
+  "description": "Gestion de stock, ventes et crédits pour commerçants : hors ligne, chiffres en FCFA.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "./",
